@@ -49,8 +49,6 @@ pub struct _Event { // TODO: find a way to make this private but keep the other 
     id: u32, 
     desc: String,
     condition: Vec<String>,
-    // parents: Vec<(Weak<RefCell<_Event>>, Vec<String>)>,
-    // children: Vec<Rc<RefCell<_Event>>>,
     children: Vec<Event>
 }
 
@@ -69,6 +67,52 @@ impl Event {
         Event(Rc::new(RefCell::new(e)))
     }
 
+    pub fn remove_child(&mut self, child: &Event) {
+        let index = self.borrow().children.iter().position(|x| x.borrow().id == child.borrow().id);
+        match index {
+            Some(i) => self.borrow_mut().children.remove(i),
+            None => panic!("item not found!"),
+        };
+    }
+
+    pub fn description(&self) -> String {
+        self.borrow().desc.clone()
+    }
+
+    pub fn date(&self) -> Date {
+        self.borrow().date
+    }
+
+    pub fn id(&self) -> u32 {
+        self.borrow().id
+    }
+
+    pub fn find_by_id(&self, target_id: u32) -> Option<Event> {
+        if self.borrow().id == target_id {
+            return Some(self.clone());
+        }
+        for child in self.get_children() {
+            if let Some(found) = child.find_by_id(target_id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    pub fn find_max_id(&self) -> u32 {
+        let current_id = self.borrow().id;
+        self.borrow()
+            .children
+            .iter()
+            .map(|child| child.find_max_id())
+            .fold(current_id, |a, b| a.max(b))
+    }
+
+    pub fn transfer(&mut self, child: &Event, target: &Event) {
+        target.borrow_mut().children.push(child.clone());
+        self.remove_child(child);
+    }
+
     pub fn add_child(&mut self, child: &mut Event, condition: Vec<String>) {
         self.borrow_mut().children.push(child.clone());
         self.borrow_mut().condition = condition;
@@ -79,8 +123,8 @@ impl Event {
         self.borrow().children.clone()
     }
 
-    pub unsafe fn force_reset_id() {
-        NEXT_ID.store(0, Ordering::Relaxed);
+    pub fn set_starting_id(id: u32) {
+        NEXT_ID.store(id, Ordering::Relaxed);
     }
 
     pub fn save_to_file(&self, filename: &str) -> std::io::Result<()> {
