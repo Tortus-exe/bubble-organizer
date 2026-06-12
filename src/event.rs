@@ -1,13 +1,16 @@
 use time::Date;
-use std::rc::{Rc, Weak};
+use std::rc::{Rc};
 use std::ops::{Deref, DerefMut};
 use std::cmp::{PartialEq, Eq};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::collections::{BTreeMap, HashSet, HashMap};
 use std::fmt;
+use serde::{Serialize, Deserialize};
+use std::fs::File;
+use std::io::{Read, Write};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Event(Rc<RefCell<_Event>>);
 
 impl Deref for Event {
@@ -41,13 +44,14 @@ impl PartialEq<Self> for _Event {
 
 impl Eq for _Event {}
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct _Event { // TODO: find a way to make this private but keep the other one public with
                     // derefmut!
     date: Date,
     id: u32, 
     desc: String,
-    parents: Vec<(Weak<RefCell<_Event>>, Vec<String>)>,
+    condition: Vec<String>,
+    // parents: Vec<(Weak<RefCell<_Event>>, Vec<String>)>,
     // children: Vec<Rc<RefCell<_Event>>>,
     children: Vec<Event>
 }
@@ -59,7 +63,8 @@ impl Event {
             date,
             id: NEXT_ID.load(Ordering::Relaxed),
             desc: desc.to_string(),
-            parents: vec![],
+            // parents: vec![],
+            condition: vec![],
             children: vec![],
         };
         NEXT_ID.fetch_add(1, Ordering::Relaxed);
@@ -68,7 +73,8 @@ impl Event {
 
     pub fn add_child(&mut self, child: &mut Event, condition: Vec<String>) {
         self.borrow_mut().children.push(child.clone());
-        child.borrow_mut().parents.push((Rc::<RefCell<_Event>>::downgrade(self), condition));
+        self.borrow_mut().condition = condition;
+        // child.borrow_mut().parents.push((Rc::<RefCell<_Event>>::downgrade(self), condition));
     }
 
     pub fn get_children(&self) -> Vec<Event> {
@@ -77,6 +83,22 @@ impl Event {
 
     pub unsafe fn force_reset_id() {
         NEXT_ID.store(0, Ordering::Relaxed);
+    }
+
+    pub fn save_to_file(&self, filename: &str) -> std::io::Result<()> {
+        let json_string = serde_json::to_string_pretty(self)?;
+        let mut file = File::create(filename)?;
+        file.write_all(json_string.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn load_from_file(filename: &str) -> std::io::Result<Self> {
+        let mut file = File::open(filename)?;
+        let mut json_string = String::new();
+        file.read_to_string(&mut json_string)?;
+        
+        let e: Event = serde_json::from_str(&json_string)?;
+        Ok(e)
     }
 }
 

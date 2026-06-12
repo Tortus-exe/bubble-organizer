@@ -48,4 +48,19 @@ mod test {
 
         assert_eq!(root.get_children(), vec![eggs, sandwich]);
     }
+
+    #[test]
+    fn test_write_save_to_file_linear_timeline() -> std::io::Result<()> {
+        let mut root = Event::new(date!(2026-01-03), "Go to the store");
+        let mut eggs = Event::new(date!(2026-01-05), "make some eggs");
+        let mut sandwich = Event::new(date!(2026-01-05), "make a sandwich");
+        sandwich.add_child(&mut eggs, vec!["bought eggs".to_string()]);
+        root.add_child(&mut sandwich, vec!["bought bread".to_string(), "bought ham".to_string()]);
+
+        root.save_to_file("tmp.txt")?;
+        let new_tree = Event::load_from_file("tmp.txt")?;
+
+        assert_eq!(root.to_string(), new_tree.to_string());
+        Ok(())
+    }
 }
